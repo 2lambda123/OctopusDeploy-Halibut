@@ -34,7 +34,7 @@ class Build : NukeBuild
     [Parameter("Branch name for OctoVersion to use to calculate the version number. Can be set via the environment variable OCTOVERSION_CurrentBranch.", Name = "OCTOVERSION_CurrentBranch")]
     readonly string BranchName;
 
-    [OctoVersion(UpdateBuildNumber = true, BranchMember = nameof(BranchName), AutoDetectBranchMember = nameof(AutoDetectBranch), Framework = "net6.0")]
+    [OctoVersion(UpdateBuildNumber = true, BranchMember = nameof(BranchName), AutoDetectBranchMember = nameof(AutoDetectBranch), Framework = "net8.0")]
     readonly OctoVersionInfo OctoVersionInfo;
 
     [Parameter("The test Filter passed to dotnet test e.g. TestCategory=Async")]
@@ -62,8 +62,8 @@ class Build : NukeBuild
     Target Clean => _ => _
         .Executes(() =>
         {
-            SourceDirectory.GlobDirectories("**/bin", "**/obj").ForEach(DeleteDirectory);
-            EnsureCleanDirectory(ArtifactsDirectory);
+            SourceDirectory.GlobDirectories("**/bin", "**/obj").ForEach(d => d.DeleteDirectory());
+            ArtifactsDirectory.CreateOrCleanDirectory();
         });
 
     Target Restore => _ => _
@@ -81,6 +81,8 @@ class Build : NukeBuild
     Target CompileNet48 => _ => CompileDefinition(_, "net48");
 
     Target CompileNet60 => _ => CompileDefinition(_, "net6.0");
+
+    Target CompileNet80 => _ => CompileDefinition(_, "net8.0");
 
     ITargetDefinition CompileDefinition(ITargetDefinition targetDefinition, [CanBeNull] string framework)
     {
@@ -102,13 +104,19 @@ class Build : NukeBuild
     Target TestWindows => _ => TestDefinition(_, Compile, null, runDotMemoryTests: true);
 
     [PublicAPI]
-    Target TestLinux => _ => TestDefinition(_, Compile, null, runDotMemoryTests: false);
+    Target TestLinux => _ => TestDefinition(_, Compile, "net6.0", runDotMemoryTests: false);
 
     [PublicAPI]
     Target TestWindowsNet48 => _ => TestDefinition(_, CompileNet48, "net48", runDotMemoryTests: true);
 
     [PublicAPI]
     Target TestWindowsNet60 => _ => TestDefinition(_, CompileNet60, "net6.0", runDotMemoryTests: true);
+
+    [PublicAPI]
+    Target TestWindowsNet80 => _ => TestDefinition(_, CompileNet80, "net8.0", runDotMemoryTests: false);
+
+    [PublicAPI]
+    Target TestLinuxNet80 => _ => TestDefinition(_, CompileNet80, "net8.0", runDotMemoryTests: false);
 
     ITargetDefinition TestDefinition(ITargetDefinition targetDefinition, Target dependsOn, [CanBeNull] string framework, bool runDotMemoryTests)
     {
@@ -130,8 +138,8 @@ class Build : NukeBuild
                     .SetFilter(TestFilter)
                     .EnableNoBuild()
                     .EnableNoRestore()
-                    .EnableBlameCrash()
-                    .SetBlameCrashDumpType("full")
+                    // .EnableBlameCrash()
+                    // .SetBlameCrashDumpType("full")
                     .EnableBlameHang()
                     // This is set high since when a hang dump is collected it is saved into /tmp/
                     // On windows the dump collecting utility appears to be missing and so nothing is collected.
@@ -155,7 +163,7 @@ class Build : NukeBuild
                 .SetOutputDirectory(ArtifactsDirectory)
                 .EnableNoBuild()
                 .DisableIncludeSymbols()
-                .SetVerbosity(DotNetVerbosity.Normal));
+                .SetVerbosity(DotNetVerbosity.normal));
         });
 
     Target CopyToLocalPackages => _ => _
@@ -163,7 +171,7 @@ class Build : NukeBuild
         .TriggeredBy(Pack)
         .Executes(() =>
         {
-            EnsureExistingDirectory(LocalPackagesDirectory);
+            LocalPackagesDirectory.CreateDirectory();
             ArtifactsDirectory.GlobFiles("*.nupkg")
                 .ForEach(package => CopyFileToDirectory(package, LocalPackagesDirectory, FileExistsPolicy.Overwrite));
         });
@@ -178,7 +186,7 @@ class Build : NukeBuild
                 .SetVersion(FullSemVer)
                 .SetConfiguration(Configuration)
                 .SetOutputDirectory(ArtifactsDirectory)
-                .SetVerbosity(DotNetVerbosity.Normal));
+                .SetVerbosity(DotNetVerbosity.normal));
         });
 
     Target Default => _ => _
